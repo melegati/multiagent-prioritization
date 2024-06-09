@@ -64,5 +64,8 @@ After receiving the user stories, select the prioritization method:
 
 ### WebSockets
 
-WebSockets are used to facilitate real-time communication between the client and the server, enabling multi-agent discussions and live updates of the prioritization process.[backlog_requirements_with_ai.csv](https://github.com/user-attachments/files/15751077/backlog_requirements_with_ai.csv)
+WebSockets are used to facilitate real-time communication between the client and the server, enabling multi-agent discussions and live updates of the prioritization process.
+
+The CSV file is attached to upload and test it. 
+[backlog_requirements_with_ai.csv](https://github.com/user-attachments/files/15751077/backlog_requirements_with_ai.csv)
 
