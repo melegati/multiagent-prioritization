@@ -4,7 +4,7 @@ Multiagent-prioritization is a project designed to prioritize user stories gener
 ## Features
 
 - **Content Input or File Upload**: Choose between direct content input or uploading a file to get user stories from the GPT model.
-- **Single or Multi-Technique Prioritization**: Select either a single technique or multiple techniques for prioritizing the user stories.
+- **Single or Multi-Technique Prioritization**: Select single technique for prioritizing the user stories.
 - **Multi-Agent Discussions**: Three agents discuss and decide on the prioritization technique(s) selected, providing a final prioritization table.
 
 ## Getting Started
@@ -30,6 +30,17 @@ Multiagent-prioritization is a project designed to prioritize user stories gener
     ```
 3: NOTE: npm i to instal the packages, if you want to change in the front end, can use npm run build or can run live frontend server using npm run dev
    Can use dist folder 
+
+## Create .env file and placed in root directory 
+
+### Write your OPENAI API's key minimum 3, to avoid API error for multi async calls.
+```bash
+API-KEY1=YOUR_API_KEY 1  
+API-KEY2=YOUR_API_KEY 2
+API-KEY3YOUR_API_KEY 3
+```
+
+Must add this env file in the .gitignore file before pushing the code in your repository
 
 
 ### Usage
