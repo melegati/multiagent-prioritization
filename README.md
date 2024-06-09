@@ -14,6 +14,7 @@ Multiagent-prioritization is a project designed to prioritize user stories gener
 - Python 3.7 or higher
 - Starlette
 - WebSockets
+- Node.js 18.x or higher
 - React 
 
 ### Installation
