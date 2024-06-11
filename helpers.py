@@ -26,19 +26,19 @@ def get_random_temperature(low=0.1, high=0.7):
 
 def construct_greetings_prompt(prioritization_technique):
     prompt = (
-        "Pekka: Hi Sami and Zeeshan, hope you're both having a great day!\n"
-        "Sami: Hi Pekka, hi Zeeshan! I’m doing well, thanks.\n"
-        "Zeeshan: Hey Pekka, hey Sami! All good here.\n\n"
-        "Pekka: We have some user stories pending in our backlog that we need to prioritize.\n"
-        f"Sami: Let's use the {prioritization_technique} technique for prioritization.\n"
-        "Zeeshan: Sounds good to me. Let's dive in."
+        "PO: Hi QA and QA, hope you're both having a great day!\n"
+        "QA: Hi PO, hi Developer! I’m doing well, thanks.\n"
+        "Developer: Hey PO, hey QA! All good here.\n\n"
+        "PO: We have some user stories pending in our backlog that we need to prioritize.\n"
+        f"QA: Let's use the {prioritization_technique} technique for prioritization.\n"
+        "Developer: Sounds good to me. Let's dive in."
     )
     return prompt
 
 def construct_topic_prompt(stories, technique):
     stories_formatted = construct_stories_formatted(stories)
     prompt = (
-        "Pekka, Sami, and Zeeshan, please discuss the following user stories and introduce the topic of the requirements:\n\n"
+        "PO, QA, and Developer, please discuss the following user stories and introduce the topic of the requirements:\n\n"
         f"{stories_formatted}\n\n"
         f"Please consider the prioritization technique: {technique}.\n\n"
     )
@@ -47,7 +47,7 @@ def construct_topic_prompt(stories, technique):
 def construct_context_prompt(stories, technique):
     stories_formatted = construct_stories_formatted(stories)
     prompt = (
-        "Pekka, Sami, and Zeeshan, please discuss the context and relevance of the following user stories:\n\n"
+        "PO, QA, and Developer, please discuss the context and relevance of the following user stories:\n\n"
         f"{stories_formatted}\n\n"
         f"Please consider the prioritization technique: {technique}.\n\n"
     )
