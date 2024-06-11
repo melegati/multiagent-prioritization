@@ -5,11 +5,11 @@ import { RQicon } from "./mysvg";
 import { Content, Footer, Header } from "antd/es/layout/layout";
 import { SearchOutlined, CaretRightOutlined } from "@ant-design/icons";
 import FullPageLoader from "./FullPageLoader";
-import { columns, finalOutputColumns, wsjfColumns } from "./columns"; // Import the necessary columns
+import { columns, finalOutputColumns, wsjfColumns, moscowColumns, kanoColumns,  ahpColumns} from "./columns"; // Import the necessary columns
 import TextArea from "antd/es/input/TextArea";
 const { Panel } = Collapse;
 import {Button,Form,Input,Layout,Space,Table,notification,Select,Collapse} from "antd";
-import { addKeyToResponse, getAgentImage, getChatMessageClass, handleSuccessResponse } from "./utilityFunctions";
+import { addKeyToResponse, getAgentImage, getChatMessageClass, handleSuccessResponse, labelOptions } from "./utilityFunctions";
 
 const WS_URL = "ws://localhost:8000/api/ws-chat";
 
@@ -89,6 +89,18 @@ function App() {
   
     connectWebSocket();
   }, []);
+
+  const handleCopyClick = () => {
+    navigator.clipboard.writeText(totalMessageData)
+      .then(() => {
+        notification.success({
+          message: "Content Copied Successfully",
+        });
+      })
+      .catch(err => {
+        alert('Failed to copy: ', err);
+      });
+  };
 
   const displayMessage = (agentType, message) => {
     return new Promise(async (resolve) => {
@@ -239,18 +251,31 @@ function App() {
       // console.log("technique:", prioritizationTechnique);
       ws.send(JSON.stringify({ 
         stories: result1, 
+        model: selectModel,
         prioritization_type: prioritizationTechnique 
       }));
     }
   };
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessageSequence([])
-    setTotalMessageData("")
-    setDisplayChatBox(true);
-    setLoading(true);
-    sendInput();
-    handleSuccessResponse();
+    const allowedModels = ["gpt-3.5-turbo", "gpt-4o"];
+
+    if (allowedModels.includes(selectModel)) {
+      setMessageSequence([]);
+      setDisplayChatBox(true);
+      setLoading(true);
+      sendInput();
+      setTotalMessageData("")
+  
+      handleSuccessResponse(prioritizationTechnique);
+      notification.success({
+        message: "Successfully ",
+      });
+    } else {
+      notification.error({
+        message: "This selected model is not working here",
+      });
+    }
   };
 
   const renderChatMessages = () => {
@@ -341,14 +366,37 @@ function App() {
           })}
   
           {!isDisplayingMessage && finalTableData.length > 0 && (
+
             <div className="final-table-container" style={{ marginTop: '20px', width: '100%' }}>
+              <button className="copy-button" onClick={handleCopyClick}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" className="icon-sm">
+                  <path fill="currentColor" fillRule="evenodd" d="M7 5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-2v2a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3h2zm2 2h5a3 3 0 0 1 3 3v5h2a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1zM5 9a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1z" clipRule="evenodd"></path>
+                </svg>
+                Copy 
+              </button>
               <h2>Final Prioritized Stories</h2>
               <Table
                 dataSource={finalTableData}
-                columns={finalPrioritizationType === "WSJF" ? wsjfColumns : finalOutputColumns} // Use appropriate columns based on prioritization type
+                columns={
+                  finalPrioritizationType === "WSJF"
+                    ? wsjfColumns
+                    : finalPrioritizationType === "MOSCOW"
+                    ? moscowColumns
+                    : finalPrioritizationType === "100_DOLLAR"
+                    ? finalOutputColumns
+                    : finalPrioritizationType === "KANO"
+                    ? kanoColumns
+                    : finalPrioritizationType === "AHP"
+                    ? ahpColumns
+                    :''
+                }             
                 pagination={false}
                 scroll={{ x: 1200, y: 500 }}
+
               />
+              {/* <Button onClick={handleCopyClick} style={{ marginTop: '20px' }}>
+                  Copy
+              </Button> */}
             </div>
           )}
         </div>
@@ -568,7 +616,7 @@ function App() {
                </div>
                 {result1.length > 0 && (
                   <div
-                    style={{ display: "flex", alignItems: "center", width: "91vw", border: "1px solid #ccc", padding: 10, borderRadius: "10px",marginBottom: 5}}
+                    style={{ display: "flex", alignItems: "center", border: "1px solid #ccc", padding: 10, borderRadius: "10px",marginBottom: 5}}
                   >
                     <Space direction="vertical" style={{ width: "100%", padding: "10px 0px" }} >
                       <Table
@@ -598,20 +646,7 @@ function App() {
                         optionFilterProp="children"
                         onChange={handleLanguage}
                         value={prioritizationTechnique}
-                        options={[
-                          // {
-                          //   value: "AHP",
-                          //   label: "AHP",
-                          // },
-                          {
-                            value: "100_Dollar",
-                            label: "100 Dollar",
-                          },
-                          {
-                            value: "WSJF",
-                            label: "WSJF",
-                          },
-                        ]}
+                        options= {labelOptions}
                       />
                     </Form.Item>
                     <Form.Item label="Model" style={{ marginLeft: "10px", marginRight: "10px" }}>
@@ -620,16 +655,16 @@ function App() {
                         optionFilterProp="children"
                         onChange={handleModel}
                         value={selectModel}
-                        defaultValue="gpt-3.5"
+                        defaultValue="gpt-3.5-turbo"
                         options={[
                           {
                             value: "gpt-3.5-turbo",
-                            label: "gpt-3.5",
+                            label: "GPT-3.5 Turbo",
                           },
-                          // {
-                          //   value: "gpt-4",
-                          //   label: "gpt-4",
-                          // },
+                          {
+                            value: "gpt-4o",
+                            label: "GPT-4 Omni",
+                          },
                         ]}
                       />
                     </Form.Item>
@@ -648,7 +683,7 @@ function App() {
                 )}
 
                {displayChatBox && (
-                 <div style={{ width: "91vw" }}>
+                 <div >
                  {responses && <div style={{ paddingTop:'10px' }}>
                   {renderChatMessages()}
                   </div>}

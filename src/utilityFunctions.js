@@ -18,10 +18,10 @@ export const getChatMessageClass = (agentType) => {
     }
   };
 
- export const handleSuccessResponse = () => {
+ export const handleSuccessResponse = (prioritizationTechnique) => {
     // Check if browser supports speech synthesis
     if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(' Chat Generating Successfully');
+      const utterance = new SpeechSynthesisUtterance(`Agents Chatting about ${prioritizationTechnique} in Process`);
       window.speechSynthesis.speak(utterance);
     } else {
       console.log('Text-to-speech not supported.');
@@ -53,3 +53,26 @@ export const getChatMessageClass = (agentType) => {
     }
   };
   
+
+  export const labelOptions = [
+    {
+      value: "100_DOLLAR",
+      label: "100 Dollar",
+    },
+    {
+      value: "WSJF",
+      label: "WSJF (Weighted Shortest Job First)",
+    },
+    {
+      value: "MOSCOW",
+      label: "MoSCoW (Must have, Should have, Could have, Won't have)",
+    },
+    {
+      value: "KANO",
+      label: "KANO (Customer Satisfaction)",
+    },
+    {
+      value: "AHP",
+      label: "AHP (Analytic Hierarchy Process)",
+    },
+  ];

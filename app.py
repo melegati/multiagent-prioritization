@@ -2,6 +2,7 @@ import asyncio
 import random
 import logging
 import os
+import re
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
@@ -21,8 +22,8 @@ from helpers import (
     get_random_temperature, construct_greetings_prompt, construct_topic_prompt,
     construct_context_prompt, construct_batch_100_dollar_prompt, parse_100_dollar_response,
     validate_dollar_distribution, enrich_stories_with_dollar_distribution,
-    construct_stories_formatted, ensure_unique_keys, estimate_wsjf, 
-    save_uploaded_file, parse_csv_to_json
+    construct_stories_formatted, ensure_unique_keys, estimate_wsjf, estimate_moscow, 
+    save_uploaded_file, parse_csv_to_json, estimate_kano, estimate_ahp
 )
 
 from agent import (
@@ -40,25 +41,34 @@ print("API Keys:", api_keys)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_json()
-            if "stories" in data and "prioritization_type" in data:
+            if "stories" in data and "prioritization_type" in data and "model" in data:
                 stories = data.get("stories")
+                model = data.get("model")
                 prioritization_type = data.get("prioritization_type").upper()  # Normalize to uppercase
-                await run_agents_workflow(stories, prioritization_type, websocket)
+                
+                if model not in ALLOWED_MODELS:
+                    await websocket.send_json({"agentType": "error", "message": f"Model {model} is not allowed. Please select from {ALLOWED_MODELS}."})
+                    continue
+
+                await run_agents_workflow(stories, prioritization_type, model, websocket)
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
     finally:
         if websocket.application_state != WebSocketState.DISCONNECTED:
             await websocket.close()
 
-async def run_agents_workflow(stories, prioritization_type, websocket):
+
+async def run_agents_workflow(stories, prioritization_type, model, websocket):
+   
     # Step 1: Greetings
     greetings_prompt = construct_greetings_prompt(prioritization_type)
-    greetings_response = await engage_agents(greetings_prompt, websocket, "PO")
+    greetings_response = await engage_agents(greetings_prompt, websocket, "PO", model)
 
     try:
         # Log the raw response for debugging
@@ -86,23 +96,32 @@ async def run_agents_workflow(stories, prioritization_type, websocket):
 
      # Step 2: Topic Introduction
     topic_prompt = construct_topic_prompt(stories, prioritization_type)
+    logger.info(f"topic_prompt : {topic_prompt}")
     
     # Step 3: Context and Discussion
     context_prompt = construct_context_prompt(stories, prioritization_type)
     
     # Run Step 2 and Step 3 concurrently
     topic_response, context_response = await asyncio.gather(
-        engage_agents(topic_prompt, websocket, "QA"),
-        engage_agents(context_prompt, websocket, "developer")
+        engage_agents(topic_prompt, websocket, "QA", model),
+        engage_agents(context_prompt, websocket, "developer", model)
     )
+
+    logger.info(f"topic_prompt response: {topic_response}")
     
     # Step 4: Prioritization
     if prioritization_type == "100_DOLLAR":
         prioritize_prompt = construct_batch_100_dollar_prompt({"stories": stories})
-        prioritized_stories = await engage_agents_in_prioritization(prioritize_prompt, stories, websocket)
+        prioritized_stories = await engage_agents_in_prioritization(prioritize_prompt, stories, websocket, model)
         print("Final 100 dollar", prioritized_stories)
     elif prioritization_type == "WSJF":
-        prioritized_stories = await estimate_wsjf(stories, websocket)
+        prioritized_stories = await estimate_wsjf(stories, websocket, model)
+    elif prioritization_type == "MOSCOW":
+        prioritized_stories = await estimate_moscow(stories, websocket, model)
+    elif prioritization_type == "KANO":
+        prioritized_stories = await estimate_kano(stories, websocket, model)
+    elif prioritization_type == "AHP":
+        prioritized_stories = await estimate_ahp({"stories": stories}, websocket, model)    
     else:
         raise ValueError(f"Unsupported prioritization type: {prioritization_type}")
 
@@ -113,7 +132,7 @@ async def run_agents_workflow(stories, prioritization_type, websocket):
     await asyncio.sleep(1)  # Delay of 1 second between greetings
     await websocket.send_json({"agentType": "Final_output_into_table", "message": prioritized_stories, "prioritization_type": prioritization_type})
 
-async def engage_agents(prompt, websocket, agent_type, max_retries=1):
+async def engage_agents(prompt, websocket, agent_type, model, max_retries=1):
     headers = {
         "Authorization": f"Bearer {random.choice(api_keys)}",
         "Content-Type": "application/json"
@@ -122,7 +141,7 @@ async def engage_agents(prompt, websocket, agent_type, max_retries=1):
     agent_prompt = {"role": "user", "content": prompt}
     
     logger.info(f"Engaging agents with prompt: {prompt}")
-    agent_response = await send_to_llm(agent_prompt['content'], headers)
+    agent_response = await send_to_llm(agent_prompt['content'], headers, model)
     
     if agent_response:
         await stream_response_word_by_word(websocket, agent_response, agent_type)
@@ -131,7 +150,7 @@ async def engage_agents(prompt, websocket, agent_type, max_retries=1):
     
     return agent_response
 
-async def engage_agents_in_prioritization(prompt, stories, websocket, max_retries=1):
+async def engage_agents_in_prioritization(prompt, stories, websocket, model, max_retries=1 ):
     headers = {
         "Authorization": f"Bearer {random.choice(api_keys)}",
         "Content-Type": "application/json"
@@ -140,7 +159,7 @@ async def engage_agents_in_prioritization(prompt, stories, websocket, max_retrie
     logger.info(f"Engaging agents in prioritization with prompt: {prompt}")
     for attempt in range(max_retries):
         try:
-            final_response = await send_to_llm(prompt, headers)
+            final_response = await send_to_llm(prompt, headers, model)
             logger.info(f"Final response from agent: {final_response}")  # Detailed logging
             await stream_response_word_by_word(websocket, final_response, "Final Prioritization")
 
@@ -150,13 +169,18 @@ async def engage_agents_in_prioritization(prompt, stories, websocket, max_retrie
                 logger.error(f"Failed to parse dollar distribution: {final_response}")
                 continue
 
-            logger.info(f"Dollar Response: {dollar_distribution}") 
-            if validate_dollar_distribution(dollar_distribution, stories):
-                enriched_stories = enrich_stories_with_dollar_distribution(stories, dollar_distribution)
-                await websocket.send_json({"agentType": "Final Prioritization", "message": {"stories": enriched_stories}})
-                return enriched_stories
-            else:
-                logger.error("Dollar distribution validation failed")
+            logger.info(f"Dollar Response: {dollar_distribution}")
+            
+            enriched_stories = enrich_stories_with_dollar_distribution(stories, dollar_distribution)
+            await websocket.send_json({"agentType": "Final Prioritization", "message": {"stories": enriched_stories}})
+            return enriched_stories
+
+            # if validate_dollar_distribution(dollar_distribution, stories):
+            #     enriched_stories = enrich_stories_with_dollar_distribution(stories, dollar_distribution)
+            #     await websocket.send_json({"agentType": "Final Prioritization", "message": {"stories": enriched_stories}})
+            #     return enriched_stories
+            # else:
+            #     logger.error("Dollar distribution validation failed")
 
         except Exception as e:
             logger.error(f"Error during prioritization attempt {attempt + 1}: {str(e)}")
@@ -164,11 +188,11 @@ async def engage_agents_in_prioritization(prompt, stories, websocket, max_retrie
 
     raise Exception("Failed to get valid response from agents after multiple attempts")
 
-async def send_to_llm(prompt, headers, max_retries=1):
+async def send_to_llm(prompt, headers, model, max_retries=1):
     for attempt in range(max_retries):
         try:
             post_data = {
-                "model": "gpt-3.5-turbo",
+                "model": model,
                 "messages": [
                     {"role": "system", "content": "You are an expert in prioritization techniques."},
                     {"role": "user", "content": prompt}
@@ -242,15 +266,18 @@ async def stream_response_as_complete_message(websocket: WebSocket, response: st
 async def catch_all(request):
     return FileResponse(os.path.join('dist', 'index.html'))
 
-async def generate_user_stories(request: Request):
+async def generate_user_stories(request: Request, model):
     data = await request.json()
     if not data or 'objective' not in data or 'num_stories' not in data:
         return JSONResponse({'error': 'Missing required data: objective and num_stories'}, status_code=400)
 
     objective = data['objective']
     num_stories = data['num_stories']
-    stories_with_epics = generate_user_stories_with_epics(objective, num_stories)
+    stories_with_epics = generate_user_stories_with_epics(objective, num_stories, model)
     return JSONResponse({"stories_with_epics": stories_with_epics})
+
+
+
 
 async def upload_csv(request: Request):
     form = await request.form()
@@ -278,6 +305,9 @@ app = Starlette(debug=True, middleware=[
     WebSocketRoute("/api/ws-chat", websocket_endpoint),
     Mount('/', StaticFiles(directory='dist', html=True), name='static')
 ])
+
+ALLOWED_MODELS = ["gpt-3.5-turbo", "gpt-4o"]
+
 
 if __name__ == "__main__":
     import uvicorn

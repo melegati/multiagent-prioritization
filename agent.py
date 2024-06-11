@@ -41,7 +41,8 @@ def construct_ahp_prompt(data):
     )
     return prompt_content
 
-def prioritize_stories_with_ahp(data):
+def prioritize_stories_with_ahp(data, model):
+ 
     prompt = construct_ahp_prompt(data)
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
     post_data = {
@@ -113,14 +114,15 @@ def construct_moscow_prompt(user_stories, method):
     )
     return prompt_content
 
-def categorize_stories_with_moscow(user_stories, method):
+def categorize_stories_with_moscow(user_stories, method, model):
+
     prompt = construct_moscow_prompt(user_stories, method)
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
     post_data = {
-        "model": "gpt-3.5-turbo",
+        "model": model,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt}
@@ -160,8 +162,8 @@ def parse_moscow_categorized_stories(completion_text):
 
 
 
-def generate_stories_with_dynamic_epics(requirements):
-   
+def generate_stories_with_dynamic_epics(requirements, model):
+
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
     
     stories_with_epics = []
@@ -176,7 +178,7 @@ def generate_stories_with_dynamic_epics(requirements):
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
-            json={"model": "gpt-3.5-turbo", "messages": conversation, "temperature": 0.7}
+            json={"model": model, "messages": conversation, "temperature": 0.7}
         )
         
         if response.status_code == 200:
@@ -196,6 +198,7 @@ def generate_stories_with_dynamic_epics(requirements):
 
     return stories_with_epics
 
+    
 def generate_user_stories_with_epics(objective, num_stories):
     print(OPENAI_API_KEY)
     headers = {
@@ -206,12 +209,20 @@ def generate_user_stories_with_epics(objective, num_stories):
     # Construct the prompt dynamically
     prompt_content = (
         f"You are a helpful assistant capable of generating user stories and suggesting epics from a given objective.\n"
-        f"Given the objective: '{objective}', generate {num_stories} distinct user stories, each with an epic."
+        f"Given the objective: '{objective}', generate {num_stories} distinct user stories. For each user story, provide the following details:\n"
+        f"1. User Story: A clear and concise user story.\n"
+        f"2. Epic: The epic under which the user story falls.\n"
+        f"3. Description: A detailed description of the user story, including acceptance criteria.\n\n"
+        f"Please use the following format for each story:\n"
+        f"### User Story X:\n"
+        f"- User Story: <user_story>\n"
+        f"- Epic: <epic>\n"
+        f"- Description: <description including acceptance criteria>\n"
     )
     
     # Prepare the data for the POST request to OpenAI using the Chat API format
     post_data = json.dumps({
-        "model": "gpt-3.5-turbo",
+        "model": model,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant capable of generating user stories and suggesting epics from the objective."},
             {"role": "user", "content": prompt_content}
@@ -219,15 +230,11 @@ def generate_user_stories_with_epics(objective, num_stories):
         "temperature": 0.7
     })
 
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, data=post_data)
+    response = requests.post(OPENAI_URL, headers=headers, data=post_data)
     
     if response.status_code == 200:
         response_data = response.json()
-        # Extract generated stories and epics from the last message
-        # Note: This will need fine-tuning based on actual model output format
         generated_content = response_data['choices'][0]['message']['content']
-        # Placeholder for parsing logic to extract stories and epics into an array of objects
-        # Assuming a simple split and parse approach; adjust based on actual response format
         print(generated_content)
         parsed_stories = parse_user_stories(generated_content)
         print(parsed_stories)
@@ -237,26 +244,32 @@ def generate_user_stories_with_epics(objective, num_stories):
 
 def parse_user_stories(text_response):
     # Adjusted pattern to match the structured numbered list format
-    # Now looking for a number, followed by ". User Story:" and "Epic:", taking into account the new line after "Epic:"
-    pattern = re.compile(r"\d+\.\s+User Story: (.*?)\s+Epic: (.*?)\s*(?=\n\d|\n*$)", re.DOTALL)
+    pattern = re.compile(
+        r"### User Story \d+:\n"
+        r"- User Story: (.*?)\n"
+        r"- Epic: (.*?)\n"
+        r"- Description: (.*?)\n",
+        re.DOTALL
+    )
 
-    # Find all matches of the pattern in the text_response
     matches = pattern.findall(text_response)
-
-    # Initialize the list to collect user stories
     user_stories = []
 
-    # Process matches if found
     for match in matches:
-        # Each match is a tuple (User Story, Epic)
-        user_stories.append({"user_story": match[0].strip(), "epic": match[1].strip()})
+        user_stories.append({
+            "user_story": match[0].strip(),
+            "epic": match[1].strip(),
+            "description": match[2].strip(),
+        })
 
-    # Check if the user_stories list is empty, implying no matches were found
     if not user_stories:
-        # Handle cases where no matches are found
-        user_stories.append({"user_story": "User story not provided", "epic": "Epic not provided"})
+        user_stories.append({
+            "user_story": "User story not provided",
+            "epic": "Epic not provided",
+            "description": "Description not provided",
+        })
 
     return user_stories
 
-
 # Parsing the response
+

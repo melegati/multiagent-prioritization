@@ -114,3 +114,28 @@ html, body {
   font-size: 16px !important;
   font-weight: 450 !important;
 }
+
+
+.copy-button {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  position: relative;
+  top: 10px;
+  background: white;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.3s;
+  margin-left: auto; /* This will push the button to the right */
+}
+
+.copy-button:hover {
+  background: #f0f0f0;
+}
+
+.icon-sm {
+  width: 16px;
+  height: 16px;
+}
