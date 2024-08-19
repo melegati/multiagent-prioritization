@@ -32,9 +32,17 @@ Multiagent-prioritization is a project designed to prioritize user stories gener
 3: NOTE: npm i to instal the packages, if you want to change in the front end, can use npm run build or can run live frontend server using npm run dev
    Can use dist folder 
 
+## Empirical Datasets
+
+The empirical datasets used in the Profes paper, which served as a foundation for this project, are available [here](https://github.com/GPT-Laboratory/multiagent-prioritization/tree/main/Datasets_And_results). These datasets are crucial for testing and validating the prioritization techniques implemented in this project.
+
+## Llama 3 Integration
+
+For Llama 3 model integration, we utilize GroqCloud. Detailed instructions for getting started with GroqCloud can be found in the [GroqCloud Quickstart Guide](https://console.groq.com/docs/quickstart).
+
 ## Create .env file and placed in root directory 
 
-### Write your OPENAI API's key minimum 3, to avoid API error for multi async calls.
+### Write your OPENAI API's key minimum 3 and 2 groqcloud api, to avoid API error for multi async calls.
 ```bash
 API-KEY1=YOUR_API_KEY 1  
 API-KEY2=YOUR_API_KEY 2
