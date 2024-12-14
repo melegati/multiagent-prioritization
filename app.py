@@ -14,12 +14,17 @@ from starlette.middleware import Middleware
 from dotenv import load_dotenv
 import httpx
 from httpx import AsyncClient, Timeout
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import JSONResponse
+import random
+
+app = FastAPI()
 
 # Load environment variables from .env file
 load_dotenv()
 
 from helpers import (
-    get_random_temperature, construct_greetings_prompt, construct_topic_prompt,
+    construct_product_owner_prompt, construct_senior_developer_prompt, construct_senior_qa_prompt, extract_text_from_pdf, get_random_temperature, construct_greetings_prompt, construct_topic_prompt,
     construct_context_prompt, construct_batch_100_dollar_prompt, parse_100_dollar_response,
     validate_dollar_distribution, enrich_stories_with_dollar_distribution,
     construct_stories_formatted, ensure_unique_keys, estimate_wsjf, estimate_moscow, 
@@ -53,8 +58,9 @@ async def websocket_endpoint(websocket: WebSocket):
             if "stories" in data and "prioritization_type" in data and "model" in data:
                 stories = data.get("stories")
                 model = data.get("model")
+                client_feedback = data.get("feedback")
                 prioritization_type = data.get("prioritization_type").upper()  # Normalize to uppercase
-                await run_agents_workflow(stories, prioritization_type, model, websocket)
+                await run_agents_workflow(stories, prioritization_type, model, client_feedback, websocket)
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
     finally:
@@ -62,42 +68,42 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
 
 
-async def run_agents_workflow(stories, prioritization_type, model, websocket):
+# client_feedback=""
+async def run_agents_workflow(stories, prioritization_type, model, client_feedback, websocket):
    
     # Step 1: Greetings
-    greetings_prompt = construct_greetings_prompt(prioritization_type)
+    greetings_prompt = construct_product_owner_prompt({"stories": stories}, client_feedback )
     greetings_response = await engage_agents(greetings_prompt, websocket, "PO", model)
 
     try:
         # Log the raw response for debugging
         logger.info(f"Raw greetings response: {greetings_response}")
 
-        # Improved parsing logic
-        greetings = greetings_response.split("2. ")
-        pekka_greeting = greetings[0].strip()
-        remaining_greetings = greetings[1].split("3. ")
-        sami_greeting = remaining_greetings[0].strip()
-        zeeshan_greeting = remaining_greetings[1].strip()
+        # # Improved parsing logic
+        # greetings = greetings_response.split("2. ")
+        # pekka_greeting = greetings[0].strip()
+        # remaining_greetings = greetings[1].split("3. ")
+        # sami_greeting = remaining_greetings[0].strip()
+        # zeeshan_greeting = remaining_greetings[1].strip()
 
         # Send greetings with delay
-        await stream_response_word_by_word(websocket, pekka_greeting, "PO")
-        await asyncio.sleep(1)  # Delay of 1 second between greetings
+        stream_response_word_by_word(websocket, greetings_response, "PO")
+        #await asyncio.sleep(1)  # Delay of 1 second between greetings
         
-        await stream_response_word_by_word(websocket, sami_greeting, "QA")
-        await asyncio.sleep(1)  # Delay of 1 second between greetings
+        #await stream_response_word_by_word(websocket, sami_greeting, "QA")
+        #await asyncio.sleep(1)  # Delay of 1 second between greetings
         
-        await stream_response_word_by_word(websocket, zeeshan_greeting, "developer")
+        #await stream_response_word_by_word(websocket, zeeshan_greeting, "developer")
     except Exception as e:
         logger.error(f"Error parsing greetings response: {greetings_response}")
         logger.error(f"Exception: {e}")
-        await websocket.send_json({"agentType": "error", "message": "Error parsing greetings response. Please try again later."})
+        #await websocket.send_json({"agentType": "error", "message": "Error parsing greetings response. Please try again later."})
 
      # Step 2: Topic Introduction
-    topic_prompt = construct_topic_prompt(stories, prioritization_type)
-    logger.info(f"topic_prompt : {topic_prompt}")
+    topic_prompt = construct_senior_developer_prompt({"stories": stories}, client_feedback )    #logger.info(f"topic_prompt : {topic_prompt}")
     
     # Step 3: Context and Discussion
-    context_prompt = construct_context_prompt(stories, prioritization_type)
+    context_prompt = construct_senior_qa_prompt({"stories": stories}, client_feedback ) 
     
     # Run Step 2 and Step 3 concurrently
     topic_response, context_response = await asyncio.gather(
@@ -105,12 +111,12 @@ async def run_agents_workflow(stories, prioritization_type, model, websocket):
         engage_agents(context_prompt, websocket, "developer", model)
     )
 
-    logger.info(f"topic_prompt response: {topic_response}")
+    #logger.info(f"topic_prompt response: {topic_response}")
     
     # Step 4: Prioritization
     if prioritization_type == "100_DOLLAR":
         # prioritize_prompt = construct_batch_100_dollar_prompt({"stories": stories}, topic_response, context_response)
-        prioritize_prompt = construct_batch_100_dollar_prompt({"stories": stories}, topic_response, context_response )
+        prioritize_prompt = construct_batch_100_dollar_prompt({"stories": stories}, topic_response, context_response, greetings_response, client_feedback )
         prioritized_stories = await engage_agents_in_prioritization(prioritize_prompt, stories, websocket, model)
         print("Final 100 dollar", prioritized_stories)
     elif prioritization_type == "WSJF":
@@ -130,6 +136,7 @@ async def run_agents_workflow(stories, prioritization_type, model, websocket):
     # Step 6: Final Output in table
     await asyncio.sleep(1)  # Delay of 1 second between greetings
     await websocket.send_json({"agentType": "Final_output_into_table", "message": prioritized_stories, "prioritization_type": prioritization_type})
+
 
 async def engage_agents(prompt, websocket, agent_type, model, max_retries=1):
     headers = {
@@ -232,7 +239,7 @@ async def stream_response_word_by_word(websocket, response, agent_type, delay=0.
             "agentType": agent_type,
             "message": response
         })
-        await asyncio.sleep(delay)  # Delay to simulate streaming effect  
+        # await asyncio.sleep(delay)  # Delay to simulate streaming effect  
 
 async def stream_response_as_complete_message(websocket: WebSocket, response: str, agent_type: str, delay: float = 0.6):
     if websocket.application_state != WebSocketState.DISCONNECTED:
@@ -252,12 +259,27 @@ async def generate_user_stories(request: Request):
         "Content-Type": "application/json"
     }
 
-    if not data or 'objective' not in data or 'model' not in data:
-        return JSONResponse({'error': 'Missing required data: objective, and model'}, status_code=400)
+    if not data or 'vision' not in data or 'model' not in data:
+        return JSONResponse({'error': 'Missing required data: vision, and model'}, status_code=400)
     model = data['model']
-    objective = data['objective']
-    stories_with_epics = generate_user_stories_with_epics(objective, model,headers)
+    vision = data['vision']
+    mvp = data['mvp']
+    stories_with_epics = generate_user_stories_with_epics(vision, mvp, model,headers)
     return JSONResponse({"stories_with_epics": stories_with_epics})
+
+
+# async def generate_user_stories_by_files(request: Request):
+#     print(vision_file)
+#     print(mvp_file)
+#     try:
+#         vision_data = await extract_text_from_pdf(vision_file)
+#         mvp_data = extract_text_from_pdf(mvp_file)
+#         print(vision_data)
+#         print(mvp_data)
+
+#         return JSONResponse({"vision_content": vision_data, "mvp_content":mvp_data })
+#     except Exception as e:
+#         return JSONResponse({'error': f"Error processing the file: {str(e)}"}, status_code=500)
 
 
 async def check_user_stories_quality(request: Request):
@@ -297,6 +319,7 @@ app = Starlette(debug=True, middleware=[
     Middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 ], routes=[
     Route('/api/generate-user-stories', generate_user_stories, methods=['POST']),
+    # Route('/api/generate-user-stories-by-files', generate_user_stories_by_files, methods=['POST']),
     Route('/api/upload-csv', upload_csv, methods=['POST']),
     Route('/api/check-user-stories-quality', check_user_stories_quality, methods=['POST']),
     WebSocketRoute("/api/ws-chat", websocket_endpoint),

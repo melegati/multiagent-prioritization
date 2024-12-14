@@ -1,5 +1,6 @@
 # helpers.py
 
+import io
 import re
 import random
 import logging
@@ -11,6 +12,7 @@ import httpx
 from httpx import Timeout, AsyncClient
 import asyncio
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
+import pdfplumber
 
 from agent import OPENAI_URL
 LLAMA_URL="https://api.groq.com/openai/v1/chat/completions"
@@ -117,13 +119,10 @@ def construct_ahp_prompt(data, topic_response, context_response):
     return prompt
 
 
-async def send_to_llm(prompt, headers, model, timeout=10000):
-    print(model)
-    if model == "llama3-70b-8192" or model == "mixtral-8x7b-32768":
-        await asyncio.sleep(1)  # Wait for 1 second
+async def send_to_llm(prompt, headers, model, timeout=100):
+    if model.startswith("llama3") or model == "mixtral-8x7b-32768":
         url = LLAMA_URL
         headers["Authorization"] = f"Bearer {random.choice(llama_keys)}"
-        print(LLAMA_URL)
     else:
         url = OPENAI_URL
         headers["Authorization"] = f"Bearer {random.choice(api_keys)}"
@@ -135,7 +134,6 @@ async def send_to_llm(prompt, headers, model, timeout=10000):
     }
     
     response = requests.post(url, json=post_data, headers=headers, timeout=timeout)
-    print(response)
     
     if response.status_code == 200:
         completion = response.json()
@@ -264,38 +262,72 @@ def construct_context_prompt(stories, technique):
     )
     return prompt
 
-def construct_batch_100_dollar_prompt(data, topic_response, context_response):
+def construct_batch_100_dollar_prompt(data, qa_response, dev_response, po_response, feedback_section):
+    # Ensure story IDs start from 1
     stories_formatted = '\n'.join([
-        f"- Story ID {story['key']}: '{story['user_story']}' {story['epic']} {story['description']}"
-        for story in data['stories']
+        f"- Story ID {index + 1}: '{story['user_story']}' {story['epic']} {story['description']}"
+        for index, story in enumerate(data['stories'])
     ])
 
-    topic_response_direct = '\n'.join(topic_response)
-    context_response_direct = '\n'.join(context_response)
+    qa_response_direct = '\n'.join(qa_response)
+    dev_response_direct = '\n'.join(dev_response)
+    po_response_direct = '\n'.join(po_response)
 
     print(stories_formatted)
-    print(topic_response_direct)
-    print(context_response_direct)
+    print(qa_response_direct)
+    print(dev_response_direct)
+    print(po_response_direct)
     
+    # prompt = (
+    # "You are the Manager agent, the head of the team responsible for prioritizing user stories by distributing 100 dollars (points) among them. "
+    # "You will base your prioritization on the combined input from three agents: QA (focused on quality and testing aspects), Developer (focused on technical context and feasibility), and Product Owner (focused on business and client needs).\n\n"
+    # "To make a balanced decision, you will:\n"
+    # "- Aggregate the feedback from each agent, averaging their inputs.\n"
+    # "- Consider the complexity, importance, and alignment with the project’s vision and MVP goals.\n"
+    # "- Provide an explanation for the prioritization based on these factors.\n\n"
+    # "Here are the user stories:\n\n"
+    # f"{stories_formatted}\n\n"
+    # "Each role has provided their input based on their expertise:\n\n"
+    # f"QA's input:\n{qa_response_direct}\n\n"
+    # f"Developer's context:\n{dev_response_direct}\n\n"
+    # f"Product Owner's perspective:\n{po_response_direct}\n\n"
+    # "Please distribute 100 dollars across these stories. Each dollar represents the relative importance of that story. "
+    # "Make sure the total adds up to 100 dollars. Your response should strictly follow this format:\n"
+    # "- Story ID X: Y dollars\n"
+    # "- Story ID Z: W dollars\n\n"
+    # "After the dollar allocation, provide a summary explanation for the distribution, outlining how the feedback from the three agents, along with complexity and alignment with project goals, influenced the prioritization."
+    # )
+
     prompt = (
-    "You are a helpful assistant trained in prioritization techniques. "
-    "We need to prioritize the following user stories by distributing 100 dollars (points) among them. "
-    "The more important a story, the more dollars it should receive. "
-    "Here are the stories:\n\n"
+    "You are the Manager agent, responsible for prioritizing user stories by distributing exactly 100 dollars among them. "
+    "Your prioritization is based on inputs from three agents: QA (focused on quality and testing aspects), Developer (focused on technical feasibility), and Product Owner (focused on business and client needs).\n\n"
+    "To make a balanced decision, you will:\n"
+    "- Aggregate feedback from each agent, averaging their inputs.\n"
+    "- Consider the complexity, importance, and alignment with the project’s vision and MVP goals.\n"
+    "- Carefully distribute exactly 100 dollars across these stories. **If your allocation does not add up to 100, adjust and recalculate until the total is exactly 100 dollars.**\n\n"
+    "**Important Steps for Exact Calculation**:\n"
+    "1. Distribute dollars based on importance. Add up your initial allocation.\n"
+    "2. If the sum is more than 100, reduce values incrementally across stories until the total is exactly 100.\n"
+    "3. If the sum is less than 100, increase values incrementally across stories until the total is exactly 100.\n"
+    "4. Repeat these adjustments as needed until the total equals exactly 100.\n\n"
+    f"{feedback_section}"
+    "Here are the user stories:\n\n"
     f"{stories_formatted}\n\n"
-    "Previously, the following points were discussed regarding prioritization:\n"
-    f"{topic_response_direct}\n\n"
-    "Additionally, here is the context from prior discussions:\n"
-    f"{context_response_direct}\n\n"
-    "Please distribute 100 dollars across these stories. Each dollar represents the relative importance of that story. "
-    "Make sure the total adds up to 100 dollars. The format for your response should strictly adhere to this pattern:\n"
+    "Each role has provided their input based on their expertise:\n\n"
+    f"QA's input:\n{qa_response_direct}\n\n"
+    f"Developer's context:\n{dev_response_direct}\n\n"
+    f"Product Owner's perspective:\n{po_response_direct}\n\n"
+    "Please distribute exactly 100 dollars across these stories. Each dollar represents the importance of that story.\n"
+    "Your response must strictly follow this format:\n"
     "- Story ID X: Y dollars\n"
     "- Story ID Z: W dollars\n\n"
-    "Please provide a detailed explanation for the allocation of dollars to each story, specifying the main reason behind its prioritization. "
-    "Include a complete explanation for every story, ensuring that each justification aligns with the discussed topics and context."
-    )
-    return prompt
+    "After allocating, **double-check that the total is exactly 100 dollars. If it does not total 100, adjust and verify until it equals exactly 100.**\n\n"
+    "provide a summary explanation for the distribution, outlining how the feedback from the three agents, along with complexity and alignment with project goals, influenced the prioritization.\n"
+    "The summary should outline how the feedback from the three agents, along with complexity and alignment with project goals, influenced the prioritization."
+)
+
     
+    return prompt
    
 
 # def construct_batch_100_dollar_prompt(data, topic_response, context_response):
@@ -355,7 +387,7 @@ def enrich_stories_with_dollar_distribution(original_stories, dollar_distributio
 
     enriched_stories = []
     for story in original_stories:
-        story_id = story['key']
+        story_id = story['key'] + 1 
         story['dollar_allocation'] = dollar_dict.get(story_id, 0)
         enriched_stories.append(story)
 
@@ -387,8 +419,8 @@ async def estimate_wsjf(data, websocket, model, topic_response, context_response
         "Authorization": f"Bearer {random.choice(api_keys)}",
         "Content-Type": "application/json"
     }
-    prioritize_prompt = construct_batch_wsjf_prompt(data)
-    # prioritize_prompt = construct_batch_wsjf_prompt(data, topic_response, context_response)
+    
+    prioritize_prompt = construct_batch_wsjf_prompt(data, topic_response, context_response)
     #logger.info(f"Prioritize Prompt:\n{prioritize_prompt}")  # Debugging print
     estimated_factors = await send_to_llm(prioritize_prompt, headers, model)
     await stream_response_word_by_word(websocket, estimated_factors, "Final Prioritization")
@@ -403,52 +435,16 @@ async def estimate_wsjf(data, websocket, model, topic_response, context_response
 
     return enriched_stories
     
-def construct_batch_wsjf_prompt(stories):
-    stories_formatted = '\n'.join([
-        f"- Story ID {story['key']}: '{story['user_story']}' {story['epic']} "
-        for story in stories
-    ])
-    
-    prompt = (
-        "You are a helpful assistant trained in WSJF factor estimation. "
-        "For each of the following user stories, please provide estimated numeric values (scale 1 to 10) for the WSJF factors:\n\n"
-        f"Here are the stories:\n{stories_formatted}\n\n"
-        "Please consider the following factors and provide values on a scale of 1 to 10, where 1 represents the lowest impact or effort and 10 represents the highest:\n"
-        "- Business Value (BV): The relative importance of this story to the business or stakeholders.\n"
-        "- Time Criticality (TC): The urgency of delivering this story sooner rather than later.\n"
-        "- Risk Reduction/Opportunity Enablement (RR/OE): The extent to which delivering this story can reduce risks or enable new opportunities.\n"
-        "- Job Size (JS): The amount of effort required to complete this story, typically measured in story points or ideal days.\n\n"
-        "Format the output as:\n"
-        "- Story ID X: (Epic: Y)\n"
-        "  - Business Value (BV): Z\n"
-        "  - Time Criticality (TC): W\n"
-        "  - Risk Reduction/Opportunity Enablement (RR/OE): V\n"
-        "  - Job Size (JS): U\n"
-    )
-    
-    return prompt
-
-# def construct_batch_wsjf_prompt(stories, topic_response, context_response):
+# def construct_batch_wsjf_prompt(stories):
 #     stories_formatted = '\n'.join([
-#         f"- Story ID {story['key']}: '{story['user_story']}' (Epic: '{story['epic']}') - {story['description']}"
+#         f"- Story ID {story['key']}: '{story['user_story']}' {story['epic']} "
 #         for story in stories
 #     ])
-    
-#     topic_response_direct = '\n'.join(topic_response)
-#     context_response_direct = '\n'.join(context_response)
-    
-#     #print(stories_formatted)
-#     #print(topic_response_direct)
-#     #print(context_response_direct)
     
 #     prompt = (
 #         "You are a helpful assistant trained in WSJF factor estimation. "
 #         "For each of the following user stories, please provide estimated numeric values (scale 1 to 10) for the WSJF factors:\n\n"
 #         f"Here are the stories:\n{stories_formatted}\n\n"
-#         "Previously, the following points were discussed regarding prioritization:\n"
-#         f"{topic_response_direct}\n\n"
-#         "Additionally, here is the context from prior discussions:\n"
-#         f"{context_response_direct}\n\n"
 #         "Please consider the following factors and provide values on a scale of 1 to 10, where 1 represents the lowest impact or effort and 10 represents the highest:\n"
 #         "- Business Value (BV): The relative importance of this story to the business or stakeholders.\n"
 #         "- Time Criticality (TC): The urgency of delivering this story sooner rather than later.\n"
@@ -459,11 +455,47 @@ def construct_batch_wsjf_prompt(stories):
 #         "  - Business Value (BV): Z\n"
 #         "  - Time Criticality (TC): W\n"
 #         "  - Risk Reduction/Opportunity Enablement (RR/OE): V\n"
-#         "  - Job Size (JS): U\n\n"
-#         "For each story, provide a detailed explanation of why it received the allocated values. What is the main reason behind its prioritization? Make sure to include a complete explanation for every story."
+#         "  - Job Size (JS): U\n"
 #     )
     
 #     return prompt
+
+def construct_batch_wsjf_prompt(stories, topic_response, context_response):
+    stories_formatted = '\n'.join([
+        f"- Story ID {story['key']}: '{story['user_story']}' (Epic: '{story['epic']}') - {story['description']}"
+        for story in stories
+    ])
+    
+    topic_response_direct = '\n'.join(topic_response)
+    context_response_direct = '\n'.join(context_response)
+    
+    #print(stories_formatted)
+    #print(topic_response_direct)
+    #print(context_response_direct)
+    
+    prompt = (
+        "You are a helpful assistant trained in WSJF factor estimation. "
+        "For each of the following user stories, please provide estimated numeric values (scale 1 to 10) for the WSJF factors:\n\n"
+        f"Here are the stories:\n{stories_formatted}\n\n"
+        "Previously, the following points were discussed regarding prioritization:\n"
+        f"{topic_response_direct}\n\n"
+        "Additionally, here is the context from prior discussions:\n"
+        f"{context_response_direct}\n\n"
+        "Please consider the following factors and provide values on a scale of 1 to 10, where 1 represents the lowest impact or effort and 10 represents the highest:\n"
+        "- Business Value (BV): The relative importance of this story to the business or stakeholders.\n"
+        "- Time Criticality (TC): The urgency of delivering this story sooner rather than later.\n"
+        "- Risk Reduction/Opportunity Enablement (RR/OE): The extent to which delivering this story can reduce risks or enable new opportunities.\n"
+        "- Job Size (JS): The amount of effort required to complete this story, typically measured in story points or ideal days.\n\n"
+        "Format the output as:\n"
+        "- Story ID X: (Epic: Y)\n"
+        "  - Business Value (BV): Z\n"
+        "  - Time Criticality (TC): W\n"
+        "  - Risk Reduction/Opportunity Enablement (RR/OE): V\n"
+        "  - Job Size (JS): U\n\n"
+        "For each story, provide a detailed explanation of why it received the allocated values. What is the main reason behind its prioritization? Make sure to include a complete explanation for every story."
+    )
+    
+    return prompt
     
 
 def parse_wsjf_response(response_text):
@@ -562,6 +594,29 @@ def parse_csv_to_json(file_path):
     os.remove(file_path)  # Optional: remove the file after processing
     return csv_data
 
+
+async def extract_text_from_pdf(file: UploadFile):
+    try:
+        # Read the file content into bytes
+        file_bytes = await file.read()
+        
+        # Use BytesIO to treat the bytes like a file for pdfplumber
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            all_text = ""
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    all_text += page_text + "\n"
+                    
+        # If no text was extracted, raise an error
+        if not all_text:
+            raise ValueError("No text could be extracted from the PDF.")
+        
+        return all_text
+    except Exception as e:
+        # Handle PDF reading/extraction errors
+        raise ValueError(f"Error extracting text from PDF: {str(e)}")
+    
 #     raise Exception("Failed to get response from OpenAI after multiple attempts")
 
 # Implement MOSCOW Technique 
@@ -797,4 +852,99 @@ async def stream_response_word_by_word(websocket, response, agent_type, delay=0.
         })
         await asyncio.sleep(delay)  # Delay to simulate streaming effect  
 
+
+def construct_product_owner_prompt(data, client_feedback=None):
+    stories_formatted = '\n'.join([
+        f"- ID {index + 1}: '{story['user_story']}' - {story['epic']} {story['description']}"
+        for index, story in enumerate(data['stories'])
+    ])
+
+    feedback_section = ""
+    if client_feedback:
+        feedback_section = "As you prioritize, consider the following feedback provided by the client:\n\n" + '\n'.join(['- ' + fb for fb in client_feedback]) + "\n\n"
+
+    print("Formatted Stories:")
+    print(stories_formatted)
+    if feedback_section:
+        print("Client Feedback:")
+        print(feedback_section)
+    
+    prompt = (
+        "You are an experienced Product Owner who has successfully delivered several products from concept to market. "
+        f"{feedback_section}"
+        "Distribute 100 dollars (points) among the following user stories. Each dollar represents the relative importance of that story. "
+        "Please distribute exactly 100 dollars across these stories, making sure the total equals exactly 100 dollars. Each dollar represents the importance of that story.\n"
+        "Ensure the total adds up to 100 dollars. Use this format:\n"
+        "- ID X: Y dollars\n"
+        "- ID Z: W dollars\n\n"
+        "Here are the stories:\n\n"
+        f"{stories_formatted}\n\n"
+        "After allocating, double-check that the total is exactly 100 dollars. If it does not total 100, adjust and verify until it equals exactly 100.\n"
+        "Provide a brief summary of two or three lines, explaining your prioritization approach, focusing on maximizing customer value and aligning with strategic goals."
+    )
+    return prompt
+
+
+def construct_senior_developer_prompt(data, client_feedback=None):
+    stories_formatted = '\n'.join([
+        f"- ID {index + 1}: '{story['user_story']}' - {story['epic']} {story['description']}"
+        for index, story in enumerate(data['stories'])
+    ])
+
+    feedback_section = ""
+    if client_feedback:
+        feedback_section = "As you prioritize, take into account the following feedback from the client:\n\n" + '\n'.join(['- ' + fb for fb in client_feedback]) + "\n\n"
+
+    print("Formatted Stories:")
+    print(stories_formatted)
+    if feedback_section:
+        print("Client Feedback:")
+        print(feedback_section)
+    
+    prompt = (
+        "You are a Senior Developer with several years of programming experience. "
+        f"{feedback_section}"
+        "Distribute 100 dollars (points) among the following user stories. Each dollar represents the relative importance of that story. "
+        "Please distribute exactly 100 dollars across these stories, making sure the total equals exactly 100 dollars. Each dollar represents the importance of that story.\n"
+        "Ensure the total adds up to 100 dollars. Use this format:\n"
+        "- ID X: Y dollars\n"
+        "- ID Z: W dollars\n\n"
+        "Here are the stories:\n\n"
+        f"{stories_formatted}\n\n"
+        "After allocating, double-check that the total is exactly 100 dollars. If it does not total 100, adjust and verify until it equals exactly 100.\n"
+        "Provide a brief summary of two or three lines,, focusing on technical dependencies, efficient project flow, and best practices."
+    )
+    return prompt
+
+
+def construct_senior_qa_prompt(data, client_feedback=None):
+    stories_formatted = '\n'.join([
+        f"- ID {index + 1}: '{story['user_story']}' - {story['epic']} {story['description']}"
+        for index, story in enumerate(data['stories'])
+    ])
+
+    feedback_section = ""
+    if client_feedback:
+        feedback_section = "As you prioritize, consider the following feedback from the client:\n\n" + '\n'.join(['- ' + fb for fb in client_feedback]) + "\n\n"
+
+    print("Formatted Stories:")
+    print(stories_formatted)
+    if feedback_section:
+        print("Client Feedback:")
+        print(feedback_section)
+    
+    prompt = (
+        "You are a Senior QA professional focused on quality and reliability. "
+        f"{feedback_section}"
+        "Distribute 100 dollars (points) among the following user stories. Each dollar represents the relative importance of that story. "
+        "Ensure the total adds up to 100 dollars. Use this format:\n"
+        "Please distribute exactly 100 dollars across these stories, making sure the total equals exactly 100 dollars. Each dollar represents the importance of that story.\n"
+        "- ID X: Y dollars\n"
+        "- ID Z: W dollars\n\n"
+        "Here are the stories:\n\n"
+        f"{stories_formatted}\n\n"
+        "After allocating, double-check that the total is exactly 100 dollars. If it does not total 100, adjust and verify until it equals exactly 100.\n"
+        "Provide a brief summary of two or three lines, emphasizing risk mitigation, quality, and client satisfaction."
+    )
+    return prompt
 

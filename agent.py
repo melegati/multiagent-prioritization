@@ -270,8 +270,7 @@ def parse_moscow_categorized_stories(completion_text):
     return categorized_stories
 
     
-def generate_user_stories_with_epics(objective, model, headers):
-    print(objective)
+def generate_user_stories_with_epics( vision, mvp, model, headers):
 
     if model == "llama3-70b-8192" or model == "mixtral-8x7b-32768":
         url = LLAMA_URL
@@ -280,40 +279,71 @@ def generate_user_stories_with_epics(objective, model, headers):
         url = OPENAI_URL
         headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
 
+
     # prompt_content = (
-    # "You are a helpful assistant capable of generating user stories and suggesting epics from a given objective.\n"
-    # "Given the objective or a goal: '{objective}', generate distinct user stories based upon the goal. For each user story, provide the following details:\n"
-    # "1. User Story: A clear and concise user story.\n"
-    # "2. Epic: The epic under which the user story falls.\n"
-    # "3. Description: Acceptance criteria for the user story.\n\n"
+    # "You are a helpful assistant tasked with generating unique user stories and suggesting epics from any project description or objective provided.\n"
+    # "Given the objective or project description: '{objective}', generate distinct user stories based upon the specified goals and requirements. Each user story should comprehensively address both the functional and technical aspects relevant to the project, ensuring uniqueness and avoiding duplication.\n"
+    # "For each user story, provide the following details:\n"
+    # "1. User Story: A clear and concise description that encapsulates a specific need or problem. Example: 'As a <role>, I want to <action>, in order to <benefit>'. Each story should be tailored to distinct functionalities or features identified in the project’s description.\n"
+    # "2. Epic: The epic under which the user story falls. Each epic should cover a broad thematic area that may include multiple user stories sharing a similar scope or functionality. Epics help organize user stories into manageable groups.\n"
+    # "3. Description: Detailed acceptance criteria for the user story, specifying what success looks like for the story to be considered complete.\n"
+    # "4. Sub-tasks: Include sub-tasks only if they are essential to the implementation of the user story. If sub-tasks are not necessary, this section can be left blank. Describe only general steps or tasks necessary to achieve the user story when included.\n\n"
     # "Please use the following format for each story:\n"
     # "### User Story X:\n"
-    # "- User Story: As a <role>, I want to <action>, In order to <benefit>.\n"
+    # "- User Story: As a <role>, I want to <action>, in order to <benefit>.\n"
     # "- Epic: <epic>\n"
-    # "- Description: <description including acceptance criteria>\n\n"
-    # "When generating user stories, categorize them under relevant epics. If a user story is similar in scope or functionality to an existing epic, assign it to that epic. If it does not fit under an existing epic, create a new epic for it.\n"
+    # "- Description: Detailed and clear acceptance criteria that define the success of the user story.\n"
+    # "- Sub-tasks:\n"
+    # "  1. <Sub-task 1> - General description of an essential action or task (if applicable).\n"
+    # "  2. <Sub-task 2> - Another necessary step for achieving the objectives of the user story (if applicable).\n"
+    # "  3. <Sub-task 3> - Further actions required to complete the user story (if applicable).\n"
+    # "  ...\n\n"
+    # "When generating user stories, ensure they are clearly categorized under relevant epics based on the overarching themes or functionalities identified in the project description. This structure promotes organizational clarity and aids in efficient project management and implementation.\n"
     # ).format(objective=objective)
 
+#     prompt_content = (
+#     "You are a helpful assistant tasked with generating unique user stories and grouping them under relevant epics based on any project vision or MVP goal provided.\n"
+#     "Given the project vision: '{vision}' and MVP goals: '{mvp}', generate distinct user stories that align with these core elements. Ensure each story comprehensively addresses both functional and technical aspects relevant to the project, with a focus on supporting the project's primary vision and achieving a functional MVP.\n"
+#     "For each user story, provide the following details:\n"
+#     "1. User Story: A clear and concise description that encapsulates a specific need or problem. Example: 'As a <role>, I want to <action>, in order to <benefit>'. Each story should directly support the project's vision or contribute towards a functional MVP.\n"
+#     "2. Epic: The broad epic under which the user story falls. Each epic should cover a thematic area and can encompass multiple related user stories that share a similar scope or functionality. This structure helps organize user stories into meaningful groups that align with the project's vision.\n"
+#     "3. Description: Detailed acceptance criteria for the user story, specifying what success looks like for the story to be considered complete, particularly in terms of MVP completion and alignment with the vision.\n"
+#     "4. Sub-tasks: Include sub-tasks only if they are essential to the implementation of the user story. If sub-tasks are not necessary, this section can be left blank. Describe only general steps or tasks necessary to achieve the user story when included.\n\n"
+#     "Please use the following format for each story:\n"
+#     "### User Story X:\n"
+#     "- User Story: As a <role>, I want to <action>, in order to <benefit>.\n"
+#     "- Epic: <epic> (Note: This epic may encompass multiple related user stories)\n"
+#     "- Description: Detailed and clear acceptance criteria that define the success of the user story, particularly in achieving MVP functionality and supporting the overall vision.\n"
+#     "- Sub-tasks:\n"
+#     "  1. <Sub-task 1> - General description of an essential action or task (if applicable).\n"
+#     "  2. <Sub-task 2> - Another necessary step for achieving the objectives of the user story (if applicable).\n"
+#     "  3. <Sub-task 3> - Further actions required to complete the user story (if applicable).\n"
+#     "  ...\n\n"
+#     "When generating user stories, ensure they are grouped under relevant epics based on the overarching themes, functionalities, or MVP goals identified. This structure promotes organizational clarity, supports efficient project management, and aligns with the project's vision and MVP goals."
+# ).format(vision=vision, mvp=mvp)
+
     prompt_content = (
-    "You are a helpful assistant tasked with generating unique user stories and suggesting epics from any project description or objective provided.\n"
-    "Given the objective or project description: '{objective}', generate distinct user stories based upon the specified goals and requirements. Each user story should comprehensively address both the functional and technical aspects relevant to the project, ensuring uniqueness and avoiding duplication.\n"
+    "You are a helpful assistant tasked with generating unique user stories and grouping them under relevant epics based on any project vision or MVP goal provided.\n"
+    "When generating user stories, ensure they are grouped under relevant epics based on overarching themes, functionalities, or MVP goals identified. Each epic should contain multiple user stories that cover various aspects of the same theme or functionality. "
+    "Aim to generate as many stories as necessary to fully cover the scope of the project, with **no upper limit on the number of user stories**. Focus on breaking down large functionalities into individual, task-specific stories.\n\n"
+    "Given the project vision: '{vision}' and MVP goals: '{mvp}', generate a comprehensive and distinct set of user stories that align with these core elements. "
+    "Ensure each story comprehensively addresses both functional and technical aspects relevant to the project, with a focus on supporting the project's primary vision and achieving a highly detailed MVP.\n\n"
     "For each user story, provide the following details:\n"
-    "1. User Story: A clear and concise description that encapsulates a specific need or problem. Example: 'As a <role>, I want to <action>, in order to <benefit>'. Each story should be tailored to distinct functionalities or features identified in the project’s description.\n"
-    "2. Epic: The epic under which the user story falls. Each epic should cover a broad thematic area that may include multiple user stories sharing a similar scope or functionality. Epics help organize user stories into manageable groups.\n"
-    "3. Description: Detailed acceptance criteria for the user story, specifying what success looks like for the story to be considered complete.\n"
-    "4. Sub-tasks: Include sub-tasks only if they are essential to the implementation of the user story. If sub-tasks are not necessary, this section can be left blank. Describe only general steps or tasks necessary to achieve the user story when included.\n\n"
+    "1. User Story: A clear and concise description that encapsulates a specific need or problem. Example: 'As a <role>, I want to <action>, in order to <benefit>'. Each story should directly support the project's vision or contribute towards a functional MVP.\n"
+    "2. Epic: The broad epic under which the user story falls. Each epic can encompass multiple related user stories that share a similar scope or functionality.\n"
+    "3. Description: Detailed acceptance criteria for the user story, specifying what success looks like for the story to be considered complete, particularly in terms of MVP completion and alignment with the vision.\n\n"
+    "Additional Guidance:\n"
+    "- **Encourage atomic functionalities**: Create user stories for individual actions and small steps within each phase of the MVP.\n"
+    "- **Ensure maximum detail**: Generate highly specific user stories that focus on even the smallest functionalities, such as scanning, logging in, generating reports, and handling errors.\n"
+    "- **No upper limit**: Keep breaking down actions until all core and sub-tasks within the MVP are covered.\n\n"
     "Please use the following format for each story:\n"
     "### User Story X:\n"
     "- User Story: As a <role>, I want to <action>, in order to <benefit>.\n"
-    "- Epic: <epic>\n"
-    "- Description: Detailed and clear acceptance criteria that define the success of the user story.\n"
-    "- Sub-tasks:\n"
-    "  1. <Sub-task 1> - General description of an essential action or task (if applicable).\n"
-    "  2. <Sub-task 2> - Another necessary step for achieving the objectives of the user story (if applicable).\n"
-    "  3. <Sub-task 3> - Further actions required to complete the user story (if applicable).\n"
-    "  ...\n\n"
-    "When generating user stories, ensure they are clearly categorized under relevant epics based on the overarching themes or functionalities identified in the project description. This structure promotes organizational clarity and aids in efficient project management and implementation.\n"
-    ).format(objective=objective)
+    "- Epic: <epic> (This epic may encompass multiple related user stories)\n"
+    "- Description: Detailed and clear acceptance criteria that define the success of the user story, particularly in achieving MVP functionality and supporting the overall vision.\n"
+).format(vision=vision, mvp=mvp)
+
+    
 
 
 
@@ -338,6 +368,7 @@ def generate_user_stories_with_epics(objective, model, headers):
         return parsed_stories
     else:
         raise Exception("Failed to process the request with OpenAI: " + response.text)
+
 
 def parse_user_stories(text_response):
     # Adjusted pattern to match the structured numbered list format, including the last line without a newline
@@ -367,6 +398,8 @@ def parse_user_stories(text_response):
         })
 
     return user_stories
+
+
 
 # Parsing the response
 
