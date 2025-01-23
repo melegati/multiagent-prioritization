@@ -155,7 +155,7 @@ def prioritize_stories_with_ahp(data, model):
     prompt = construct_ahp_prompt(data)
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
     post_data = {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o-mini",
         "messages": [{"role": "system", "content": "You are a helpful assistant trained in AHP."}, {"role": "user", "content": prompt}],
         "temperature": 0.7
     }

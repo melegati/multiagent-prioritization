@@ -57,7 +57,7 @@ function App() {
 
   const [prioritizationTechnique, setPrioritizationTechnique] =
     useState("100_Dollar");
-  const [selectModel, setSelectModel] = useState("gpt-3.5-turbo");
+  const [selectModel, setSelectModel] = useState("gpt-4o-mini");
   const [frameWork, setFromWork] = useState("INVEST framework");
   const [result1, setResult1] = useState([]);
   const [frameWorkResult, setFrameWorkResult] = useState([]);
@@ -843,11 +843,11 @@ function App() {
                                 optionFilterProp="children"
                                 onChange={handleModel}
                                 value={selectModel}
-                                defaultValue="gpt-3.5-turbo"
+                                defaultValue="gpt-4o-mini"
                                 options={[
                                   {
-                                    value: "gpt-3.5-turbo",
-                                    label: "gpt-3.5",
+                                    value: "gpt-4o-mini",
+                                    label: "gpt-4o-mini",
                                   },
                                   {
                                     value: "gpt-4o",
@@ -915,11 +915,11 @@ function App() {
                                 optionFilterProp="children"
                                 onChange={handleModel}
                                 value={selectModel}
-                                defaultValue="gpt-3.5-turbo"
+                                defaultValue="gpt-4o-mini"
                                 options={[
                                   {
-                                    value: "gpt-3.5-turbo",
-                                    label: "gpt-3.5",
+                                    value: "gpt-4o-mini",
+                                    label: "gpt-4o-mini",
                                   },
                                   {
                                     value: "gpt-4o",
@@ -1223,11 +1223,11 @@ function App() {
                           optionFilterProp="children"
                           onChange={handleModel}
                           value={selectModel}
-                          defaultValue="gpt-3.5-turbo"
+                          defaultValue="gpt-4o-mini"
                           options={[
                             {
-                              value: "gpt-3.5-turbo",
-                              label: "GPT-3.5 Turbo",
+                              value: "gpt-4o-mini",
+                              label: "GPT-4o mini",
                             },
                             {
                               value: "gpt-4o",
